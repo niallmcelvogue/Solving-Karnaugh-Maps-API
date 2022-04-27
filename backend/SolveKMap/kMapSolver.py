@@ -443,5 +443,4 @@ def main(a, n_var, solutionType):
         response["optimisedSolution"] = (NOR(POS(response["optimisedSolution"])))
         solution = response
     print(solution["optimisedSolution"])
-    print(solutionType)
     return solution, initialGroups, initialPairing, secondPairing
