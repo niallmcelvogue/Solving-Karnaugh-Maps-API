@@ -1,8 +1,46 @@
 import itertools
+import math
+from re import search
+from .NAND import NAND
+from .POS import POS
+from .NOR import NOR
+
+response = {
+    "PI": "",
+    "EPI": "",
+    "optimisedSolution": ""
+}
+
+
+def returnMinterms(a):  # Function for finding out which minterms are merged. For example, 10-1 is obtained by merging
+    # 9(1001) and 11(1011)
+    gaps = a.count('-')
+    if gaps == 0:
+        return [str(int(a, 2))]
+    x = [bin(i)[2:].zfill(gaps) for i in range(pow(2, gaps))]
+    temp = []
+    for i in range(pow(2, gaps)):
+        temp2, ind = a[:], -1
+        for j in x[0]:
+            if ind != -1:
+                ind = ind + temp2[ind + 1:].find('-') + 1
+            else:
+                ind = temp2[ind + 1:].find('-')
+            temp2 = temp2[:ind] + j + temp2[ind + 1:]
+        temp.append(str(int(temp2, 2)))
+        x.pop(0)
+    return temp
+
+
+# Convert List to JSON
+def Convert(a):
+    it = iter(a)
+    res_dct = dict(zip(it, it))
+    return res_dct
 
 
 # compare two binary strings, check where there is one difference
-def compBinary(s1, s2):
+def compElement(s1, s2):
     count = 0
     pos = 0
     for i in range(len(s1)):
@@ -16,7 +54,6 @@ def compBinary(s1, s2):
 
 
 # compare if the number is same as implicant term
-# s1 should be the term
 def compBinarySame(term, number):
     for i in range(len(term)):
         if term[i] != '-':
@@ -27,38 +64,34 @@ def compBinarySame(term, number):
 
 
 # combine pairs and make new group
-def combinePairs(group, unchecked):
-    # define length
-    l = len(group) - 1
-
+def combineMinterms(group, unchecked):
     # check list
     check_list = []
 
     # create next group
-    next_group = [[] for x in range(l)]
-
+    next_group = [[] for x in range(len(group) - 1)]
+    substring = "-"
     # go through the groups
-    for i in range(l):
-        # first selected group
+    for i in range(len(group) - 1):
         for elem1 in group[i]:
-            # next selected group
             for elem2 in group[i + 1]:
-                b, pos = compBinary(elem1, elem2)
-                if b == True:
-                    # append the ones used in check list
-                    check_list.append(elem1)
-                    check_list.append(elem2)
+                b, pos = compElement(elem1, elem2)
+                if b:
+                    if search(substring, elem1) or search(substring, elem2):
+                        check_list.append(elem1 + " " + elem2)
+                    else:
+                        check_list.append(str(int(elem1, 2)) + "," + str(int(elem2, 2)))
                     # replace the different bit with '-'
                     new_elem = list(elem1)
                     new_elem[pos] = '-'
-                    new_elem = "".join(new_elem)
+                    new_elem = "".join(new_elem)  #
                     next_group[i].append(new_elem)
     for i in group:
         for j in i:
             if j not in check_list:
                 unchecked.append(j)
 
-    return next_group, unchecked
+    return next_group, unchecked, check_list
 
 
 # remove redundant lists in 2d list
@@ -97,7 +130,7 @@ def check_empty(group):
     return False
 
 
-# find essential prime implicants ( col num of ones = 1)
+# find essential prime implicants
 def find_prime(Chart):
     prime = []
     for col in range(len(Chart[0])):
@@ -123,23 +156,8 @@ def check_all_zero(Chart):
     return True
 
 
-# find max value in list
-
-
-def find_max(l):
-    max = -1
-    index = 0
-    for i in range(len(l)):
-        if l[i] > max:
-            max = l[i]
-            index = i
-    return index
-
-
 # multiply two terms (ex. (p1 + p2)(p1+p4+p5) )..it returns the product
-
-
-def multiplication(list1, list2):
+def multiply(list1, list2):
     list_result = []
     # if empty
     if len(list1) == 0 and len(list2) == 0:
@@ -150,25 +168,17 @@ def multiplication(list1, list2):
     # if another is empty
     elif len(list2) == 0:
         return list1
-
-    # both not empty
     else:
         for i in list1:
             for j in list2:
-                # if two term same
                 if i == j:
-                    # list_result.append(sorted(i))
                     list_result.append(i)
                 else:
-                    # list_result.append(sorted(list(set(i+j))))
                     list_result.append(list(set(i + j)))
 
         # sort and remove redundant lists and return this list
         list_result.sort()
         return list(list_result for list_result, _ in itertools.groupby(list_result))
-
-
-# petrick's method
 
 
 def petrick_method(Chart):
@@ -182,7 +192,7 @@ def petrick_method(Chart):
         P.append(p)
     # do multiplication
     for l in range(len(P) - 1):
-        P[l + 1] = multiplication(P[l], P[l + 1])
+        P[l + 1] = multiply(P[l], P[l + 1])
 
     P = sorted(P[len(P) - 1], key=len)
     final = []
@@ -197,23 +207,20 @@ def petrick_method(Chart):
     return final
 
 
-# chart = n*n list
-
-
 def find_minimum_cost(Chart, unchecked):
     P_final = []
     # essential_prime = list with terms with only one 1 (Essential Prime Implicants)
     essential_prime = find_prime(Chart)
     essential_prime = remove_redundant_list(essential_prime)
 
-    # print out the essential primes
+    # Assign essential primes
     if len(essential_prime) > 0:
-        s = "\nEssential Prime Implicants :\n"
+        s = ""
         for i in range(len(unchecked)):
             for j in essential_prime:
                 if j == i:
-                    s = s + binary_to_letter(unchecked[i]) + ' , '
-        print(s[:(len(s) - 3)])
+                    s = s + binary_to_letter(unchecked[i], True) + ' , '
+                    response["EPI"] = (s[:(len(s) - 3)])
 
     # modifiy the chart to exclude the covered terms
     for i in range(len(essential_prime)):
@@ -223,7 +230,7 @@ def find_minimum_cost(Chart, unchecked):
                     Chart[row][col] = 0
 
     # if all zero, no need for petrick method
-    if check_all_zero(Chart) == True:
+    if check_all_zero(Chart):
         P_final = [essential_prime]
     else:
         # petrick's method
@@ -266,14 +273,13 @@ def cal_efficient(s):
     for i in range(len(s)):
         if s[i] != '-':
             count += 1
-
     return count
 
 
 # print the binary code to letter
 
 
-def binary_to_letter(s):
+def binary_to_letter(s, POS):
     out = ''
     c = 'a'
     more = False
@@ -304,50 +310,46 @@ def binary_to_letter(s):
     return out
 
 
-# main function
-def main(a):
-    # get the num of variables (bits) as input
-    # n_var = int(input("Enter the number of variables(bits): "))
-    # get the minterms as input
-    # minterms = input("Enter the minterms (ex. 0 1 2 5 9 10) : ")
-    n_var = 3
-    # put the numbers in list in int form
+def returnDecimal(val):
+    decimal = []
+    for item in val:
+        decimal.append(str(int(item, 2)))
+    return decimal
 
-    # make a group list
-    group = [[] for x in range(n_var + 1)]
+#Store binary pairs
+def pairingResults(group):
+    firstPassPI = []
+    decimal = []
 
-    for i in range(len(a)):
-        # convert to binary
-        a[i] = bin(a[i])[2:]
-        if len(a[i]) < n_var:
-            # add zeros to fill the n-bits
-            for j in range(n_var - len(a[i])):
-                a[i] = '0' + a[i]
-        # if incorrect input
-        elif len(a[i]) > n_var:
-            print('\nError : Choose the correct number of variables(bits)\n')
-            return
-        # count the num of 1
-        index = a[i].count('1')
-        # group by num of 1 separately
-        group[index].append(a[i])
+    for items in group:
+        for item in items:
+            y = ','.join(returnMinterms(item))
+            decimal.append(y)
+    j = 0
+    for idx, val in enumerate(group):
+        i = len(group[idx]) + j
+        firstPassPI.extend([["Group", idx, "Binary", val, "Pairs", decimal[j:i]]])
+        j = i
+    return firstPassPI
 
-    all_group = []
-    unchecked = []
-    # combine the pairs in series until nothing new can be combined
-    while not check_empty(group):
-        all_group.append(group)
-        next_group, unchecked = combinePairs(group, unchecked)
-        group = remove_redundant(next_group)
 
-    s = "\nPrime Implicants :\n"
-    for i in unchecked:
-        s = s + binary_to_letter(i) + " , "
-    print('-' * 50)
-    print(s[:(len(s) - 3)])
-    print('-' * 50)
+def createPairs(group):
+    firstPass = []
+    initialPairing = []
+    try:
+        for idx, val in enumerate(group):
+            if group[idx]:
+                firstPass.extend([val])
 
-    # make the prime implicant chart
+        x = pairingResults(firstPass)
+        for i in range(len(x)):
+            initialPairing.append(Convert(x[i]))
+        return initialPairing
+    except:
+        return ''
+
+
+def returnSolution(a, n_var, unchecked):
     Chart = [[0 for x in range(len(a))] for x in range(len(unchecked))]
 
     for i in range(len(a)):
@@ -356,16 +358,90 @@ def main(a):
             if compBinarySame(unchecked[j], a[i]):
                 Chart[j][i] = 1
 
-    # prime contains the index of the prime implicant terms
-    # prime = remove_redundant_list(find_minimum_cost(Chart))
     primes = find_minimum_cost(Chart, unchecked)
     primes = remove_redundant(primes)
-    print("\n--  Answers --\n")
 
     for prime in primes:
         s = ''
         for i in range(len(unchecked)):
             for j in prime:
                 if j == i:
-                    s = s + binary_to_letter(unchecked[i]) + ' + '
-        return s[:(len(s) - 3)]
+                    s = s + binary_to_letter(unchecked[i], True) + ' + '
+        response["optimisedSolution"] = s[:(len(s) - 3)]
+        if math.log(len(a), 2) == n_var:
+            response["optimisedSolution"] = '1'
+        return response
+
+
+def toBinary(a, n_var):
+    group = [[] for x in range(n_var + 1)]
+    decimal = []
+    for i in range(len(a)):
+        # convert to binary
+        a[i] = bin(a[i])[2:]
+        if len(a[i]) < n_var:
+            # add zeros to fill the n-bits
+            for j in range(n_var - len(a[i])):
+                a[i] = '0' + a[i]
+        elif len(a[i]) > n_var:
+            print('\nError : Choose the correct number of variables(bits)\n')
+            return
+        # count the num of 1
+        index = a[i].count('1')
+        # group by num of 1 separately
+        group[index].append(a[i])
+    return group
+
+
+# main function
+def main(a, n_var, solutionType):
+    # make a group list
+    group = toBinary(a, n_var)
+    all_group = []
+    unchecked = []
+    checked = []
+    # combine the pairs in series until nothing new can be combined
+    while not check_empty(group):
+        all_group.append(group)
+        next_group, unchecked, check_list = combineMinterms(group, unchecked)
+        checked.append(check_list)
+        group = remove_redundant(next_group)
+
+    primeImplicants = []
+    for idx, val in enumerate(all_group[0]):
+        if all_group[0][idx]:
+            primeImplicants.extend([["Group", idx, "Binary", val, "Decimal", returnDecimal(val)]])
+
+    initialGroups = []
+    initialPairing = []
+    secondPairing = []
+    for i in range(len(primeImplicants)):
+        initialGroups.append(Convert(primeImplicants[i]))
+    if len(all_group) > 1:
+        initialPairing = createPairs(all_group[1])
+
+    if len(all_group) > 2:
+        secondPairing = createPairs(all_group[2])
+    s = ""
+    for i in unchecked:
+        s = s + binary_to_letter(i, True) + " , "
+        response["PI"] = (s[:(len(s) - 3)])
+
+    if math.log(len(a), 2) == n_var:
+        response["optimisedSolution"] = '1'
+        solution = response
+    else:
+        # make the prime implicant chart
+        solution = returnSolution(a, n_var, unchecked)
+    if solutionType == "NAND":
+        response["optimisedSolution"] = (NAND(response["optimisedSolution"]))
+        solution = response
+    elif solutionType == "POS":
+        response["optimisedSolution"] = (POS(response["optimisedSolution"]))
+        solution = response
+    elif solutionType == "NOR":
+        response["optimisedSolution"] = (NOR(POS(response["optimisedSolution"])))
+        solution = response
+    print(solution["optimisedSolution"])
+    print(solutionType)
+    return solution, initialGroups, initialPairing, secondPairing
